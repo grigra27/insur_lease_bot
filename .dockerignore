@@ -1,0 +1,12 @@
+.git
+.gitignore
+.env
+.env.example
+__pycache__
+*.pyc
+.pytest_cache
+README.md
+secrets-examples.txt
+user_queries.log
+tariffs_online.csv
+tariffs_service_file.ipynb

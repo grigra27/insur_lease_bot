@@ -113,3 +113,5 @@ yarn-error.log*
 
 tariffs_service_file.ipynb
 tariffs_online.csv
+secrets-examples.txt
+user_queries.log
