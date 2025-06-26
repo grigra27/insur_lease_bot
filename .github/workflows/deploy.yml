@@ -46,7 +46,6 @@ jobs:
           key: ${{ secrets.DROPLET_SSH_KEY }}
           passphrase: ${{ secrets.DROPLET_PASSPHRASE }}
           envs: DOCKER_HUB_USERNAME,IMAGE_NAME,GITHUB_SHA
-          timeout: 1200
           script: |
             # Pull the new image
             cd /root/insur_lease_bot
