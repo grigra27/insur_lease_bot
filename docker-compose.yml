@@ -1,0 +1,11 @@
+version: '3.8'
+services:
+  insur_lease_bot:
+    image: ${DOCKER_HUB_USERNAME}/${IMAGE_NAME}:${GITHUB_SHA}
+    container_name: insur_lease_bot
+    restart: always
+    env_file:
+      - .env
+    volumes:
+      - ./tariffs_online.csv:/app/tariffs_online.csv:ro
+    command: ["python3", "bot.py"]

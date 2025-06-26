@@ -48,18 +48,6 @@ jobs:
           envs: DOCKER_HUB_USERNAME,IMAGE_NAME,GITHUB_SHA
           script: |
             # Pull the new image
-            docker pull ${{ secrets.DOCKER_HUB_USERNAME }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
-            
-            # Stop and remove the old container if it exists
-            docker stop insur_lease_bot || true
-            docker rm insur_lease_bot || true
-            
-            # Run the new container
-            docker run -d \
-              --name insur_lease_bot \
-              --restart always \
-              -e TELEGRAM_BOT_TOKEN=${{ secrets.TELEGRAM_BOT_TOKEN }} \
-              -e ADMIN_TELEGRAM_USER_ID=${{ secrets.ADMIN_TELEGRAM_USER_ID }} \
-              -e ADMIN_TELEGRAM_BOT_TOKEN=${{ secrets.ADMIN_TELEGRAM_BOT_TOKEN }} \
-              -v /root/insur_lease_bot/tariffs_online.csv:/app/tariffs_online.csv:ro
-              ${{ secrets.DOCKER_HUB_USERNAME }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+            cd /root/insur_lease_bot
+            docker compose pull
+            docker compose up -d
