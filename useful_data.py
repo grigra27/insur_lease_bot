@@ -1,14 +1,16 @@
 import pandas as pd
+import asyncio
 
 df = pd.read_csv('tariffs_online.csv', sep=';')
 
-
-def search_in_our_base(search_phrase):
+async def search_in_our_base(search_phrase):
     """
-    Функция производит поиск предмета лизинга в базе данных и возвращает подробную информацию о результатах.
+    Асинхронная функция поиска предмета лизинга в базе данных и возврата подробной информации о результатах.
     :param search_phrase: Строка, по которой производится поиск
     :return: Строка с информацией о найденных записях
     """
+    # имитируем асинхронность для совместимости с async handler
+    await asyncio.sleep(0)
     used_df = df[df.property.str.contains(search_phrase, case=False)]
     if len(used_df) == 0:
         return f"Предмет лизинга '{search_phrase}' не найден в нашей базе данных."

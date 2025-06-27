@@ -80,7 +80,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         await update.message.reply_text('Пожалуйста, введите корректный запрос.')
         return
     try:
-        result = search_in_our_base(query)
+        result = await search_in_our_base(query)
         await update.message.reply_text(result, parse_mode='Markdown')
     except Exception as e:
         err_msg = f"Ошибка при обработке запроса пользователя {user.id} ({user.username}): {e}\n{traceback.format_exc()}"

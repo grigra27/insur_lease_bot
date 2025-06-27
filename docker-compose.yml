@@ -11,14 +11,13 @@ services:
       - ./user_queries.log:/app/user_queries.log
     command: ["python3", "bot.py"]
 
-  digest_cron:
+  digest_sender:
     image: ${DOCKER_HUB_USERNAME}/${IMAGE_NAME}:${GITHUB_SHA}
-    container_name: digest_cron
-    restart: always
+    container_name: digest_sender
+    restart: "no"
     env_file:
       - .env
     volumes:
       - ./tariffs_online.csv:/app/tariffs_online.csv:ro
       - ./user_queries.log:/app/user_queries.log
-      - ./digest_cron.sh:/digest_cron.sh:ro
-    entrypoint: ["/bin/sh", "/digest_cron.sh"]
+    command: ["python3", "digest_sender.py"]
