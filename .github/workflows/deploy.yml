@@ -52,5 +52,5 @@ jobs:
             set -e
             cd /root/insur_lease_bot
             docker compose pull insur_lease_bot
-            docker compose pull digest_cron
+            docker compose pull digest_sender
             docker compose up -d
