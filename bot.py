@@ -18,9 +18,21 @@ ADMIN_BOT_TOKEN = os.getenv('ADMIN_TELEGRAM_BOT_TOKEN')
 ADMIN_USER_ID = os.getenv('ADMIN_TELEGRAM_USER_ID')
 
 
-def log_user_query(user_id, username, text):
+def log_user_query(user, text):
+    now = datetime.datetime.now()
+    iso_time = now.isoformat()
+    human_time = now.strftime('%d.%m.%Y %H:%M:%S')
+    user_id = user.id
+    username = user.username or '-'
+    first_name = user.first_name or '-'
+    last_name = user.last_name or '-'
+    lang = getattr(user, 'language_code', '-')
+    is_bot = getattr(user, 'is_bot', False)
+    log_line = (f"{iso_time} | {human_time} | user_id: {user_id} | username: {username} | "
+                f"first_name: {first_name} | last_name: {last_name} | lang: {lang} | is_bot: {is_bot} | запрос: {text}\n")
     with open(USER_LOG_FILE, 'a', encoding='utf-8') as f:
-        f.write(f"{datetime.datetime.now().isoformat()} | {user_id} | {username} | {text}\n")
+        f.write(log_line)
+
 
 
 def notify_admin(message):
@@ -75,7 +87,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user = update.effective_user
     query = update.message.text.strip()
-    log_user_query(user.id, user.username, query)
+    log_user_query(user, query)
     if not query:
         await update.message.reply_text('Пожалуйста, введите корректный запрос.')
         return
