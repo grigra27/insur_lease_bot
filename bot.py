@@ -20,12 +20,13 @@ ADMIN_USER_ID = os.getenv('ADMIN_TELEGRAM_USER_ID')
 
 def log_user_query(user, text):
     now = datetime.datetime.now()
+    iso_time = now.isoformat()
     human_time = now.strftime('%d.%m.%Y %H:%M:%S')
     user_id = user.id
     username = user.username or '-'
     first_name = user.first_name or '-'
     last_name = user.last_name or '-'
-    log_line = (f"{human_time} | user_id: {user_id} | username: {username} | "
+    log_line = (f"{iso_time} | {human_time} | user_id: {user_id} | username: {username} | "
                 f"имя: {first_name} | фамилия: {last_name} | запрос: {text}\n")
     with open(USER_LOG_FILE, 'a', encoding='utf-8') as f:
         f.write(log_line)
