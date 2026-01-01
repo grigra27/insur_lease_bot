@@ -1,110 +1,225 @@
 import logging
-from telegram import Update, ForceReply
-from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
-from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
-from useful_data import search_in_our_base, get_welcome_phrase
 import os
-import traceback
 import datetime
+import traceback
+import asyncio
+from telegram import Update
+from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
+import pandas as pd
 import requests
+from dotenv import load_dotenv
 
+# Загружаем переменные окружения
+load_dotenv()
+
+# Настройка логирования
 logging.basicConfig(
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', 
+    level=logging.INFO
 )
 logger = logging.getLogger(__name__)
 
+# Константы
 USER_LOG_FILE = 'user_queries.log'
-ADMIN_BOT_TOKEN = os.getenv('ADMIN_TELEGRAM_BOT_TOKEN')
-ADMIN_USER_ID = os.getenv('ADMIN_TELEGRAM_USER_ID')
+CSV_FILE = 'tariffs_online.csv'
 
+class InsuranceLeasingBot:
+    def __init__(self):
+        self.bot_token = os.getenv("TELEGRAM_BOT_TOKEN")
+        self.admin_bot_token = os.getenv('ADMIN_TELEGRAM_BOT_TOKEN')
+        self.admin_user_id = os.getenv('ADMIN_TELEGRAM_USER_ID')
+        
+        if not self.bot_token:
+            raise RuntimeError("TELEGRAM_BOT_TOKEN env variable is not set!")
+        
+        # Загружаем данные один раз при инициализации
+        self.df = self._load_data()
+        
+    def _load_data(self):
+        """Загружает данные из CSV файла с кешированием"""
+        try:
+            df = pd.read_csv(CSV_FILE, sep=';')
+            logger.info(f"Loaded {len(df)} records from {CSV_FILE}")
+            return df
+        except Exception as e:
+            logger.error(f"Failed to load data: {e}")
+            return pd.DataFrame()
+    
+    def _log_user_query(self, user, text):
+        """Логирует запрос пользователя"""
+        now = datetime.datetime.now()
+        iso_time = now.isoformat()
+        user_id = user.id
+        username = user.username or '-'
+        first_name = user.first_name or '-'
+        last_name = user.last_name or '-'
+        
+        log_line = (f"{iso_time} | user_id: {user_id} | username: {username} | "
+                   f"имя: {first_name} | фамилия: {last_name} | запрос: {text}\n")
+        
+        try:
+            with open(USER_LOG_FILE, 'a', encoding='utf-8') as f:
+                f.write(log_line)
+        except Exception as e:
+            logger.error(f"Failed to log user query: {e}")
+    
+    def _notify_admin(self, message):
+        """Отправляет уведомление администратору"""
+        if not self.admin_bot_token or not self.admin_user_id:
+            logger.warning('Admin bot token or user id not set, cannot notify admin!')
+            return
+        
+        url = f"https://api.telegram.org/bot{self.admin_bot_token}/sendMessage"
+        data = {"chat_id": self.admin_user_id, "text": message}
+        
+        try:
+            requests.post(url, data=data, timeout=10)
+        except Exception as e:
+            logger.error(f"Failed to notify admin: {e}")
+    
+    async def _search_in_base(self, search_phrase):
+        """Поиск в базе данных"""
+        if self.df.empty:
+            return "❗️ База данных недоступна. Попробуйте позже."
+        
+        # Поиск без учета регистра
+        used_df = self.df[self.df['property'].str.contains(search_phrase, case=False, na=False)]
+        
+        if len(used_df) == 0:
+            return f"""❗️*Ничего не найдено по запросу* **«{search_phrase}»**.
 
-def log_user_query(user, text):
-    now = datetime.datetime.now()
-    iso_time = now.isoformat()
-    user_id = user.id
-    username = user.username or '-'
-    first_name = user.first_name or '-'
-    last_name = user.last_name or '-'
-    log_line = (f"{iso_time} | user_id: {user_id} | username: {username} | "
-                f"имя: {first_name} | фамилия: {last_name} | запрос: {text}\n")
-    with open(USER_LOG_FILE, 'a', encoding='utf-8') as f:
-        f.write(log_line)
+🔍 Пожалуйста, проверьте правильность написания или попробуйте другой вариант названия.
 
+💡 *Примеры запросов:*
+- `Haval Jolion`
+- `sitrak`
+- `BMW X5`"""
+        
+        records_count = len(used_df)
+        property_min = round((used_df['property_value'].min()) / 1000000, 3)
+        property_median = round((used_df['property_value'].median()) / 1000000, 3)
+        property_max = round((used_df['property_value'].max()) / 1000000, 3)
+        tarif_min = round(used_df['tarif'].min(), 2)
+        tarif_median = round(used_df['tarif'].median(), 2)
+        tarif_max = round(used_df['tarif'].max(), 2)
+        insurance_type = used_df['type'].mode()[0] if not used_df['type'].empty else "Не указано"
+        insurance_company = used_df['insurer'].mode()[0] if not used_df['insurer'].empty else "Не указано"
+        
+        return f"""🔍 *Результаты по запросу:* _"{search_phrase}"_
 
+📄 Найдено *{records_count}* запис{"ь" if records_count == 1 else "и"} о таком предмете лизинга.
 
-def notify_admin(message):
-    if not ADMIN_BOT_TOKEN or not ADMIN_USER_ID:
-        logger.warning('Admin bot token or user id not set, cannot notify admin!')
-        return
-    url = f"https://api.telegram.org/bot{ADMIN_BOT_TOKEN}/sendMessage"
-    data = {"chat_id": ADMIN_USER_ID, "text": message}
-    try:
-        requests.post(url, data=data, timeout=10)
-    except Exception as e:
-        logger.error(f"Failed to notify admin: {e}")
+💰 *Цена предмета лизинга:*
+• Медианная цена: *{property_median} млн ₽*
+• Диапазон: от *{property_min} млн ₽* до *{property_max} млн ₽*
 
+🛡 *Страховой тариф:*
+• Медианный тариф: *{tarif_median}%*
+• Диапазон: от *{tarif_min}%* до *{tarif_max}%*
 
-def send_daily_digest():
-    """
-    Читает user_queries.log и отправляет дайджест админу. Запускать отдельно (например, по cron).
-    """
-    if not ADMIN_BOT_TOKEN or not ADMIN_USER_ID:
-        logger.warning('Admin bot token or user id not set, cannot send digest!')
-        return
-    if not os.path.exists(USER_LOG_FILE):
-        notify_admin('Дайджест: за сутки не было запросов.')
-        return
-    with open(USER_LOG_FILE, 'r', encoding='utf-8') as f:
-        lines = f.readlines()
-    if not lines:
-        notify_admin('Дайджест: за сутки не было запросов.')
-        return
-    # Можно фильтровать по дате, если файл не очищается
-    digest = ''.join(lines[-50:])  # последние 50 запросов
-    message = f'Дайджест запросов пользователей за сутки:\n{digest}'
-    url = f"https://api.telegram.org/bot{ADMIN_BOT_TOKEN}/sendMessage"
-    data = {"chat_id": ADMIN_USER_ID, "text": message}
-    try:
-        requests.post(url, data=data, timeout=15)
-    except Exception as e:
-        logger.error(f"Failed to send digest: {e}")
-
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    await update.message.reply_text(get_welcome_phrase())
-
-async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    commands = [
-        '/start — приветствие',
-        '/help — список команд',
-        'Отправьте название предмета лизинга — получите информацию из базы',
-    ]
-    help_text = 'Доступные команды:\n' + '\n'.join(commands)
-    await update.message.reply_text(help_text)
-
-async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    user = update.effective_user
-    query = update.message.text.strip()
-    log_user_query(user, query)
-    if not query:
-        await update.message.reply_text('Пожалуйста, введите корректный запрос.')
-        return
-    try:
-        result = await search_in_our_base(query)
-        await update.message.reply_text(result, parse_mode='Markdown')
-    except Exception as e:
-        err_msg = f"Ошибка при обработке запроса пользователя {user.id} ({user.username}): {e}\n{traceback.format_exc()}"
-        notify_admin(f"Срочно! Бот не смог обработать запрос: {err_msg}")
-        await update.message.reply_text('Произошла ошибка при обработке запроса. Администратор уведомлен.')
-
-def main():
-    token = os.getenv("TELEGRAM_BOT_TOKEN")
-    if not token:
-        raise RuntimeError("TELEGRAM_BOT_TOKEN env variable is not set!")
-    app = ApplicationBuilder().token(token).build()
-    app.add_handler(CommandHandler('start', start))
-    app.add_handler(CommandHandler('help', help_command))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-    app.run_polling()
+🏷 Чаще всего страхуется как: *"{insurance_type}"* 
+🏙 Чаще всего страхуется в страховой компании: *"{insurance_company}"*"""
+    
+    def _get_welcome_phrase(self):
+        """Возвращает приветственное сообщение"""
+        return (
+            f"👋 Добро пожаловать!\n\n"
+            f"📊 Вы можете найти информацию о страховании лизингового имущества. "
+            f"В нашей базе сейчас {len(self.df)} записей.\n\n"
+            f"🔎 Просто введите название интересующего вас предмета лизинга, "
+            f"например 'Haval Dargo' или 'sitrak'."
+        )
+    
+    async def start_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Обработчик команды /start"""
+        await update.message.reply_text(self._get_welcome_phrase())
+    
+    async def help_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Обработчик команды /help"""
+        commands = [
+            '/start — приветствие',
+            '/help — список команд',
+            '/digest — отправить дайджест админу (только для админа)',
+            'Отправьте название предмета лизинга — получите информацию из базы',
+        ]
+        help_text = 'Доступные команды:\n' + '\n'.join(commands)
+        await update.message.reply_text(help_text)
+    
+    async def digest_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Обработчик команды /digest - отправка дайджеста"""
+        user_id = str(update.effective_user.id)
+        if user_id != self.admin_user_id:
+            await update.message.reply_text("❌ У вас нет прав для выполнения этой команды.")
+            return
+        
+        try:
+            await self._send_digest()
+            await update.message.reply_text("✅ Дайджест отправлен!")
+        except Exception as e:
+            await update.message.reply_text(f"❌ Ошибка при отправке дайджеста: {e}")
+    
+    async def _send_digest(self):
+        """Отправляет дайджест администратору"""
+        if not os.path.exists(USER_LOG_FILE):
+            self._notify_admin('Дайджест: за сутки не было запросов.')
+            return
+        
+        with open(USER_LOG_FILE, 'r', encoding='utf-8') as f:
+            lines = f.readlines()
+        
+        if not lines:
+            self._notify_admin('Дайджест: за сутки не было запросов.')
+            return
+        
+        # Фильтруем записи за сегодня
+        today = datetime.datetime.now().date()
+        today_lines = [
+            line for line in lines
+            if line and line[:10] == today.isoformat()
+        ]
+        
+        digest_lines = today_lines if today_lines else lines[-50:]  # fallback: последние 50
+        digest = ''.join(digest_lines)
+        message = f'Дайджест запросов пользователей в leasing bot за {today}:\n{digest}'
+        
+        # Разбиваем длинные сообщения
+        if len(message) > 4000:
+            message = message[:4000] + "\n... (сообщение обрезано)"
+        
+        self._notify_admin(message)
+    
+    async def handle_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Обработчик текстовых сообщений"""
+        user = update.effective_user
+        query = update.message.text.strip()
+        
+        self._log_user_query(user, query)
+        
+        if not query:
+            await update.message.reply_text('Пожалуйста, введите корректный запрос.')
+            return
+        
+        try:
+            result = await self._search_in_base(query)
+            await update.message.reply_text(result, parse_mode='Markdown')
+        except Exception as e:
+            err_msg = f"Ошибка при обработке запроса пользователя {user.id} ({user.username}): {e}\n{traceback.format_exc()}"
+            self._notify_admin(f"Срочно! Бот не смог обработать запрос: {err_msg}")
+            await update.message.reply_text('Произошла ошибка при обработке запроса. Администратор уведомлен.')
+    
+    def run(self):
+        """Запуск бота"""
+        app = Application.builder().token(self.bot_token).build()
+        
+        # Добавляем обработчики
+        app.add_handler(CommandHandler('start', self.start_command))
+        app.add_handler(CommandHandler('help', self.help_command))
+        app.add_handler(CommandHandler('digest', self.digest_command))
+        app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, self.handle_message))
+        
+        logger.info("Starting bot...")
+        app.run_polling()
 
 if __name__ == '__main__':
-    main()
+    bot = InsuranceLeasingBot()
+    bot.run()
