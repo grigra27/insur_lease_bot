@@ -10,6 +10,7 @@ services:
     volumes:
       - ./logs:/app/logs
       - ./user_queries.log:/app/user_queries.log
+      - ./tariffs_online.csv:/app/tariffs_online.csv:ro
     healthcheck:
       test: ["CMD", "python", "-c", "import requests; requests.get('https://api.telegram.org/bot' + open('.env').read().split('TELEGRAM_BOT_TOKEN=')[1].split('\n')[0] + '/getMe', timeout=5)"]
       interval: 30s
