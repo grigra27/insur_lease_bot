@@ -21,8 +21,8 @@ jobs:
           host: ${{ secrets.TIMEWEB_HOST }}
           username: ${{ secrets.TIMEWEB_USERNAME }}
           key: ${{ secrets.TIMEWEB_SSH_KEY }}
-          port: ${{ secrets.TIMEWEB_PORT || 22 }}
           timeout: 10m
+          debug: true
           script: |
             set -e
             
