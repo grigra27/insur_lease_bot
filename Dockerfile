@@ -14,7 +14,6 @@ RUN pip install --no-cache-dir --upgrade pip && \
 
 # Копируем код приложения
 COPY bot.py .
-COPY useful_data.py .
 COPY tariffs_online.csv .
 
 # Создаем пользователя для безопасности
