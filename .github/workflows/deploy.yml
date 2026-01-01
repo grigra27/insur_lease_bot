@@ -76,8 +76,9 @@ jobs:
             ADMIN_TELEGRAM_USER_ID=$ADMIN_TELEGRAM_USER_ID
             EOF
             
-            # Create logs directory
+            # Create logs directory and log file
             mkdir -p logs
+            touch user_queries.log
             
             # Stop and remove existing containers
             docker compose down || true

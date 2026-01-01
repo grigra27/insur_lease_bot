@@ -12,7 +12,7 @@ services:
       - ./user_queries.log:/app/user_queries.log
       - ./tariffs_online.csv:/app/tariffs_online.csv:ro
     healthcheck:
-      test: ["CMD", "python", "-c", "import requests; requests.get('https://api.telegram.org/bot' + open('.env').read().split('TELEGRAM_BOT_TOKEN=')[1].split('\n')[0] + '/getMe', timeout=5)"]
+      test: ["CMD", "python", "-c", "import requests; r = requests.get('https://api.telegram.org/bot' + open('.env').read().split('TELEGRAM_BOT_TOKEN=')[1].split('\\n')[0] + '/getMe', timeout=5); exit(0 if r.status_code == 200 else 1)"]
       interval: 30s
       timeout: 10s
       retries: 3
