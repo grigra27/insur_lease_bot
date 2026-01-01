@@ -8,6 +8,8 @@ from telegram.ext import Application, CommandHandler, MessageHandler, filters, C
 import pandas as pd
 import requests
 from dotenv import load_dotenv
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from apscheduler.triggers.cron import CronTrigger
 
 # Загружаем переменные окружения
 load_dotenv()
@@ -34,6 +36,9 @@ class InsuranceLeasingBot:
         
         # Загружаем данные один раз при инициализации
         self.df = self._load_data()
+        
+        # Инициализируем планировщик
+        self.scheduler = AsyncIOScheduler()
         
     def _load_data(self):
         """Загружает данные из CSV файла с кешированием"""
@@ -187,6 +192,7 @@ class InsuranceLeasingBot:
             message = message[:4000] + "\n... (сообщение обрезано)"
         
         self._notify_admin(message)
+        logger.info("Daily digest sent successfully")
     
     async def handle_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Обработчик текстовых сообщений"""
@@ -207,6 +213,18 @@ class InsuranceLeasingBot:
             self._notify_admin(f"Срочно! Бот не смог обработать запрос: {err_msg}")
             await update.message.reply_text('Произошла ошибка при обработке запроса. Администратор уведомлен.')
     
+    def _setup_scheduler(self):
+        """Настройка планировщика для автоматических дайджестов"""
+        # Отправка дайджеста каждый день в 2:00 UTC
+        self.scheduler.add_job(
+            self._send_digest,
+            CronTrigger(hour=2, minute=0),
+            id='daily_digest',
+            name='Daily Digest',
+            replace_existing=True
+        )
+        logger.info("Scheduler configured for daily digest at 2:00 UTC")
+    
     def run(self):
         """Запуск бота"""
         app = Application.builder().token(self.bot_token).build()
@@ -217,7 +235,11 @@ class InsuranceLeasingBot:
         app.add_handler(CommandHandler('digest', self.digest_command))
         app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, self.handle_message))
         
-        logger.info("Starting bot...")
+        # Настраиваем планировщик
+        self._setup_scheduler()
+        self.scheduler.start()
+        
+        logger.info("Starting bot with daily digest scheduler...")
         app.run_polling()
 
 if __name__ == '__main__':
