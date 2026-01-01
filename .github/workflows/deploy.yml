@@ -6,63 +6,60 @@ on:
   workflow_dispatch:
 
 env:
-  IMAGE_NAME: "insur-lease-bot"
+  BOT_NAME: "insur_lease_bot"
 
 jobs:
-  test-ssh:
+  test:
     runs-on: ubuntu-latest
     steps:
-      - name: Test SSH Connection
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+          
+      - name: Install dependencies
         run: |
-          echo "Testing SSH connection..."
-          echo "Host: ${{ secrets.TIMEWEB_HOST }}"
-          echo "Username: ${{ secrets.TIMEWEB_USERNAME }}"
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
           
-          # Создаем временный SSH ключ
-          mkdir -p ~/.ssh
-          echo "${{ secrets.TIMEWEB_SSH_KEY }}" > ~/.ssh/temp_key
-          chmod 600 ~/.ssh/temp_key
-          
-          # Проверяем формат ключа
-          echo "SSH key format check:"
-          head -1 ~/.ssh/temp_key
-          tail -1 ~/.ssh/temp_key
-          
-          # Проверяем длину ключа
-          wc -l ~/.ssh/temp_key
-          
-          # Пробуем подключиться
-          echo "Trying SSH connection..."
-          ssh -v -o ConnectTimeout=10 -o StrictHostKeyChecking=no -i ~/.ssh/temp_key ${{ secrets.TIMEWEB_USERNAME }}@${{ secrets.TIMEWEB_HOST }} "echo 'SSH works!'" 2>&1 || echo "SSH failed"
-          
-          rm ~/.ssh/temp_key
+      - name: Lint code
+        run: |
+          python -m py_compile bot.py
+          echo "✅ Code syntax check passed"
 
   deploy:
-    needs: test-ssh
+    needs: test
     runs-on: ubuntu-latest
-    if: success()
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Deploy to Timeweb Cloud
-        uses: appleboy/ssh-action@v1.0.3
+      - name: Deploy to Timeweb
+        uses: appleboy/ssh-action@v1.0.0
         with:
           host: ${{ secrets.TIMEWEB_HOST }}
           username: ${{ secrets.TIMEWEB_USERNAME }}
           key: ${{ secrets.TIMEWEB_SSH_KEY }}
-          timeout: 10m
+          envs: TELEGRAM_BOT_TOKEN,ADMIN_TELEGRAM_BOT_TOKEN,ADMIN_TELEGRAM_USER_ID,BOT_NAME
           script: |
-            set -e
+            # Set environment variables
+            export TELEGRAM_BOT_TOKEN="${{ secrets.TELEGRAM_BOT_TOKEN }}"
+            export ADMIN_TELEGRAM_BOT_TOKEN="${{ secrets.ADMIN_TELEGRAM_BOT_TOKEN }}"
+            export ADMIN_TELEGRAM_USER_ID="${{ secrets.ADMIN_TELEGRAM_USER_ID }}"
+            export BOT_NAME="${{ env.BOT_NAME }}"
             
-            # Переходим в директорию проекта
-            cd /home/${{ secrets.TIMEWEB_USERNAME }}/insur_lease_bot || {
+            # Navigate to deployment directory
+            cd /opt/insur_lease_bot || {
               echo "Creating project directory..."
-              mkdir -p /home/${{ secrets.TIMEWEB_USERNAME }}/insur_lease_bot
-              cd /home/${{ secrets.TIMEWEB_USERNAME }}/insur_lease_bot
+              sudo mkdir -p /opt/insur_lease_bot
+              sudo chown $USER:$USER /opt/insur_lease_bot
+              cd /opt/insur_lease_bot
             }
             
-            # Обновляем код из репозитория
+            # Update code from repository
             if [ -d ".git" ]; then
               echo "Updating existing repository..."
               git fetch origin
@@ -72,26 +69,28 @@ jobs:
               git clone ${{ github.server_url }}/${{ github.repository }} .
             fi
             
-            # Создаем .env файл из секретов
+            # Create .env file from secrets
             cat > .env << EOF
-            TELEGRAM_BOT_TOKEN=${{ secrets.TELEGRAM_BOT_TOKEN }}
-            ADMIN_TELEGRAM_BOT_TOKEN=${{ secrets.ADMIN_TELEGRAM_BOT_TOKEN }}
-            ADMIN_TELEGRAM_USER_ID=${{ secrets.ADMIN_TELEGRAM_USER_ID }}
+            TELEGRAM_BOT_TOKEN=$TELEGRAM_BOT_TOKEN
+            ADMIN_TELEGRAM_BOT_TOKEN=$ADMIN_TELEGRAM_BOT_TOKEN
+            ADMIN_TELEGRAM_USER_ID=$ADMIN_TELEGRAM_USER_ID
             EOF
             
-            # Создаем директорию для логов
+            # Create logs directory
             mkdir -p logs
             
-            # Останавливаем старые контейнеры
+            # Stop and remove existing containers
             docker compose down || true
             
-            # Удаляем старые образы
+            # Clean up old images
             docker image prune -f || true
             
-            # Запускаем новую версию
+            # Start new version
             docker compose up -d --build
             
-            # Проверяем статус
-            sleep 10
+            # Wait for container to start
+            sleep 15
+            
+            # Check status
             docker compose ps
             docker compose logs --tail=20
