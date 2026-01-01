@@ -57,10 +57,10 @@ jobs:
             set -e
             
             # Переходим в директорию проекта
-            cd /home/${{ secrets.TIMEWEB_USERNAME }}/insur_lease_bot || {
+            cd /home/deploy/insur_lease_bot || {
               echo "Creating project directory..."
-              mkdir -p /home/${{ secrets.TIMEWEB_USERNAME }}/insur_lease_bot
-              cd /home/${{ secrets.TIMEWEB_USERNAME }}/insur_lease_bot
+              mkdir -p /home/deploy/insur_lease_bot
+              cd /home/deploy/insur_lease_bot
             }
             
             # Обновляем код из репозитория
