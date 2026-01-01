@@ -78,6 +78,7 @@ jobs:
             
             # Create logs directory and log file
             mkdir -p logs
+            rm -rf user_queries.log
             touch user_queries.log
             
             # Stop and remove existing containers
