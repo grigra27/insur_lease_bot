@@ -9,8 +9,38 @@ env:
   IMAGE_NAME: "insur-lease-bot"
 
 jobs:
-  deploy:
+  test-ssh:
     runs-on: ubuntu-latest
+    steps:
+      - name: Test SSH Connection
+        run: |
+          echo "Testing SSH connection..."
+          echo "Host: ${{ secrets.TIMEWEB_HOST }}"
+          echo "Username: ${{ secrets.TIMEWEB_USERNAME }}"
+          
+          # Создаем временный SSH ключ
+          mkdir -p ~/.ssh
+          echo "${{ secrets.TIMEWEB_SSH_KEY }}" > ~/.ssh/temp_key
+          chmod 600 ~/.ssh/temp_key
+          
+          # Проверяем формат ключа
+          echo "SSH key format check:"
+          head -1 ~/.ssh/temp_key
+          tail -1 ~/.ssh/temp_key
+          
+          # Проверяем длину ключа
+          wc -l ~/.ssh/temp_key
+          
+          # Пробуем подключиться
+          echo "Trying SSH connection..."
+          ssh -v -o ConnectTimeout=10 -o StrictHostKeyChecking=no -i ~/.ssh/temp_key ${{ secrets.TIMEWEB_USERNAME }}@${{ secrets.TIMEWEB_HOST }} "echo 'SSH works!'" 2>&1 || echo "SSH failed"
+          
+          rm ~/.ssh/temp_key
+
+  deploy:
+    needs: test-ssh
+    runs-on: ubuntu-latest
+    if: success()
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -22,7 +52,6 @@ jobs:
           username: ${{ secrets.TIMEWEB_USERNAME }}
           key: ${{ secrets.TIMEWEB_SSH_KEY }}
           timeout: 10m
-          debug: true
           script: |
             set -e
             
