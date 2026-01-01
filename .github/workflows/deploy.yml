@@ -15,6 +15,31 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Test SSH Connection
+        run: |
+          echo "Testing SSH connection..."
+          echo "Host: ${{ secrets.TIMEWEB_HOST }}"
+          echo "Username: ${{ secrets.TIMEWEB_USERNAME }}"
+          echo "SSH Key length: ${#TIMEWEB_SSH_KEY}"
+          
+          # Создаем временный SSH ключ
+          mkdir -p ~/.ssh
+          echo "${{ secrets.TIMEWEB_SSH_KEY }}" > ~/.ssh/temp_key
+          chmod 600 ~/.ssh/temp_key
+          
+          # Проверяем формат ключа
+          echo "SSH key format check:"
+          head -1 ~/.ssh/temp_key
+          tail -1 ~/.ssh/temp_key
+          
+          # Пробуем подключиться с разными портами
+          echo "Trying different SSH ports..."
+          ssh -o ConnectTimeout=10 -o StrictHostKeyChecking=no -i ~/.ssh/temp_key ${{ secrets.TIMEWEB_USERNAME }}@${{ secrets.TIMEWEB_HOST }} "echo 'SSH works on port 22'" || echo "Port 22 failed"
+          ssh -o ConnectTimeout=10 -o StrictHostKeyChecking=no -i ~/.ssh/temp_key -p 2222 ${{ secrets.TIMEWEB_USERNAME }}@${{ secrets.TIMEWEB_HOST }} "echo 'SSH works on port 2222'" || echo "Port 2222 failed"
+          ssh -o ConnectTimeout=10 -o StrictHostKeyChecking=no -i ~/.ssh/temp_key -p 22022 ${{ secrets.TIMEWEB_USERNAME }}@${{ secrets.TIMEWEB_HOST }} "echo 'SSH works on port 22022'" || echo "Port 22022 failed"
+          
+          rm ~/.ssh/temp_key
+
       - name: Deploy to Timeweb Cloud
         uses: appleboy/ssh-action@v1.0.3
         with:
