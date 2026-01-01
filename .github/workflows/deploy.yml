@@ -27,11 +27,10 @@ jobs:
             set -e
             
             # Переходим в директорию проекта
-            cd /opt/insur_lease_bot || {
+            cd /home/deploy/insur_lease_bot || {
               echo "Creating project directory..."
-              sudo mkdir -p /opt/insur_lease_bot
-              sudo chown $USER:$USER /opt/insur_lease_bot
-              cd /opt/insur_lease_bot
+              mkdir -p /home/deploy/insur_lease_bot
+              cd /home/deploy/insur_lease_bot
             }
             
             # Обновляем код из репозитория
