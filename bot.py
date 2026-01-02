@@ -166,33 +166,49 @@ class InsuranceLeasingBot:
     async def _send_digest(self):
         """Отправляет дайджест администратору"""
         if not os.path.exists(USER_LOG_FILE):
-            self._notify_admin('Дайджест: за сутки не было запросов.')
+            self._notify_admin('Дайджест: за последние 24 часа не было запросов.')
             return
         
         with open(USER_LOG_FILE, 'r', encoding='utf-8') as f:
             lines = f.readlines()
         
         if not lines:
-            self._notify_admin('Дайджест: за сутки не было запросов.')
+            self._notify_admin('Дайджест: за последние 24 часа не было запросов.')
             return
         
-        # Фильтруем записи за сегодня
-        today = datetime.datetime.now().date()
-        today_lines = [
-            line for line in lines
-            if line and line[:10] == today.isoformat()
-        ]
+        # Фильтруем записи за последние 24 часа
+        now = datetime.datetime.now()
+        yesterday = now - datetime.timedelta(days=1)
         
-        digest_lines = today_lines if today_lines else lines[-50:]  # fallback: последние 50
-        digest = ''.join(digest_lines)
-        message = f'Дайджест запросов пользователей в leasing bot за {today}:\n{digest}'
+        recent_lines = []
+        for line in lines:
+            if line and len(line) > 19:  # Проверяем, что строка содержит дату
+                try:
+                    # Извлекаем дату из строки лога (формат: 2026-01-01T18:43:29.811)
+                    log_time_str = line[:19]  # Берем первые 19 символов
+                    log_time = datetime.datetime.fromisoformat(log_time_str)
+                    
+                    # Если запись за последние 24 часа
+                    if log_time >= yesterday:
+                        recent_lines.append(line)
+                except (ValueError, IndexError):
+                    # Если не удалось распарсить дату, пропускаем строку
+                    continue
+        
+        # Если нет записей за 24 часа, сообщаем об этом
+        if not recent_lines:
+            self._notify_admin('Дайджест: за последние 24 часа не было запросов.')
+            return
+        
+        digest = ''.join(recent_lines)
+        message = f'Дайджест запросов пользователей в leasing bot за последние 24 часа ({len(recent_lines)} запросов):\n\n{digest}'
         
         # Разбиваем длинные сообщения
         if len(message) > 4000:
             message = message[:4000] + "\n... (сообщение обрезано)"
         
         self._notify_admin(message)
-        logger.info("Daily digest sent successfully")
+        logger.info(f"Daily digest sent successfully: {len(recent_lines)} queries")
     
     async def handle_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Обработчик текстовых сообщений"""
