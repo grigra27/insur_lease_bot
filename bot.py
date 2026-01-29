@@ -28,7 +28,6 @@ CSV_FILE = 'tariffs_online.csv'
 class InsuranceLeasingBot:
     def __init__(self):
         self.bot_token = os.getenv("TELEGRAM_BOT_TOKEN")
-        self.admin_bot_token = os.getenv('ADMIN_TELEGRAM_BOT_TOKEN')
         self.admin_user_id = os.getenv('ADMIN_TELEGRAM_USER_ID')
         
         if not self.bot_token:
@@ -39,6 +38,9 @@ class InsuranceLeasingBot:
         
         # Инициализируем планировщик
         self.scheduler = AsyncIOScheduler()
+        
+        # Сохраняем ссылку на application для отправки сообщений
+        self.application = None
         
     def _load_data(self):
         """Загружает данные из CSV файла с кешированием"""
@@ -68,17 +70,21 @@ class InsuranceLeasingBot:
         except Exception as e:
             logger.error(f"Failed to log user query: {e}")
     
-    def _notify_admin(self, message):
+    async def _notify_admin(self, message):
         """Отправляет уведомление администратору"""
-        if not self.admin_bot_token or not self.admin_user_id:
-            logger.warning('Admin bot token or user id not set, cannot notify admin!')
+        if not self.admin_user_id:
+            logger.warning('Admin user id not set, cannot notify admin!')
             return
         
-        url = f"https://api.telegram.org/bot{self.admin_bot_token}/sendMessage"
-        data = {"chat_id": self.admin_user_id, "text": message}
+        if not self.application:
+            logger.warning('Application not initialized, cannot notify admin!')
+            return
         
         try:
-            requests.post(url, data=data, timeout=10)
+            await self.application.bot.send_message(
+                chat_id=self.admin_user_id,
+                text=message
+            )
         except Exception as e:
             logger.error(f"Failed to notify admin: {e}")
     
@@ -166,14 +172,14 @@ class InsuranceLeasingBot:
     async def _send_digest(self):
         """Отправляет дайджест администратору"""
         if not os.path.exists(USER_LOG_FILE):
-            self._notify_admin('Дайджест: за последние 24 часа не было запросов.')
+            await self._notify_admin('Дайджест: за последние 24 часа не было запросов.')
             return
         
         with open(USER_LOG_FILE, 'r', encoding='utf-8') as f:
             lines = f.readlines()
         
         if not lines:
-            self._notify_admin('Дайджест: за последние 24 часа не было запросов.')
+            await self._notify_admin('Дайджест: за последние 24 часа не было запросов.')
             return
         
         # Фильтруем записи за последние 24 часа
@@ -197,7 +203,7 @@ class InsuranceLeasingBot:
         
         # Если нет записей за 24 часа, сообщаем об этом
         if not recent_lines:
-            self._notify_admin('Дайджест: за последние 24 часа не было запросов.')
+            await self._notify_admin('Дайджест: за последние 24 часа не было запросов.')
             return
         
         digest = ''.join(recent_lines)
@@ -207,7 +213,7 @@ class InsuranceLeasingBot:
         if len(message) > 4000:
             message = message[:4000] + "\n... (сообщение обрезано)"
         
-        self._notify_admin(message)
+        await self._notify_admin(message)
         logger.info(f"Daily digest sent successfully: {len(recent_lines)} queries")
     
     async def handle_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -225,8 +231,8 @@ class InsuranceLeasingBot:
             result = await self._search_in_base(query)
             await update.message.reply_text(result, parse_mode='Markdown')
         except Exception as e:
-            err_msg = f"Ошибка при обработке запроса пользователя {user.id} ({user.username}): {e}\n{traceback.format_exc()}"
-            self._notify_admin(f"Срочно! Бот не смог обработать запрос: {err_msg}")
+            err_msg = f"Срочно! Бот не смог обработать запрос:\nОшибка при обработке запроса пользователя {user.id} ({user.username}): {e}\n{traceback.format_exc()}"
+            await self._notify_admin(err_msg)
             await update.message.reply_text('Произошла ошибка при обработке запроса. Администратор уведомлен.')
     
     def _setup_scheduler(self):
@@ -243,20 +249,20 @@ class InsuranceLeasingBot:
     
     def run(self):
         """Запуск бота"""
-        app = Application.builder().token(self.bot_token).build()
+        self.application = Application.builder().token(self.bot_token).build()
         
         # Добавляем обработчики
-        app.add_handler(CommandHandler('start', self.start_command))
-        app.add_handler(CommandHandler('help', self.help_command))
-        app.add_handler(CommandHandler('digest', self.digest_command))
-        app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, self.handle_message))
+        self.application.add_handler(CommandHandler('start', self.start_command))
+        self.application.add_handler(CommandHandler('help', self.help_command))
+        self.application.add_handler(CommandHandler('digest', self.digest_command))
+        self.application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, self.handle_message))
         
         # Настраиваем планировщик
         self._setup_scheduler()
         self.scheduler.start()
         
         logger.info("Starting bot with daily digest scheduler...")
-        app.run_polling()
+        self.application.run_polling()
 
 if __name__ == '__main__':
     bot = InsuranceLeasingBot()
