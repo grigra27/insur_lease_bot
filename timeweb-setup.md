@@ -66,7 +66,6 @@ TIMEWEB_PORT=22  # если используется стандартный по
 
 # Токены бота (те же, что и раньше)
 TELEGRAM_BOT_TOKEN=your_bot_token
-ADMIN_TELEGRAM_BOT_TOKEN=your_admin_bot_token
 ADMIN_TELEGRAM_USER_ID=your_admin_user_id
 ```
 
@@ -79,7 +78,6 @@ cd /home/deploy/insur_lease_bot
 # Создание .env файла
 cat > .env << EOF
 TELEGRAM_BOT_TOKEN=your_bot_token
-ADMIN_TELEGRAM_BOT_TOKEN=your_admin_bot_token
 ADMIN_TELEGRAM_USER_ID=your_admin_user_id
 EOF
 

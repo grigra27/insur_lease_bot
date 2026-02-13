@@ -21,7 +21,6 @@
 2. Настройте переменные окружения в файле `.env`:
    ```
    TELEGRAM_BOT_TOKEN=your_main_bot_token
-   ADMIN_TELEGRAM_BOT_TOKEN=your_admin_bot_token
    ADMIN_TELEGRAM_USER_ID=your_admin_user_id
    ```
 
@@ -67,7 +66,6 @@
 ## Зависимости
 - python-telegram-bot — работа с Telegram Bot API
 - pandas — обработка данных из CSV
-- requests — HTTP-запросы
 - python-dotenv — загрузка переменных окружения
 
 ## CI/CD
