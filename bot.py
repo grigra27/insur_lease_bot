@@ -2,11 +2,11 @@ import logging
 import os
 import datetime
 import traceback
-import asyncio
+import re
+from difflib import SequenceMatcher
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 import pandas as pd
-import requests
 from dotenv import load_dotenv
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
@@ -46,11 +46,39 @@ class InsuranceLeasingBot:
         """Загружает данные из CSV файла с кешированием"""
         try:
             df = pd.read_csv(CSV_FILE, sep=';')
+            df['property_normalized'] = df['property'].fillna('').astype(str).map(self._normalize_text)
             logger.info(f"Loaded {len(df)} records from {CSV_FILE}")
             return df
         except Exception as e:
             logger.error(f"Failed to load data: {e}")
             return pd.DataFrame()
+
+    @staticmethod
+    def _normalize_text(text: str) -> str:
+        """Нормализует текст для устойчивого поиска"""
+        char_map = str.maketrans({
+            'а': 'a', 'в': 'b', 'е': 'e', 'к': 'k', 'м': 'm', 'н': 'h',
+            'о': 'o', 'р': 'p', 'с': 'c', 'т': 't', 'у': 'y', 'х': 'x',
+        })
+        normalized = str(text).strip().lower().translate(char_map)
+        normalized = re.sub(r'[^\w\s-]', ' ', normalized)
+        normalized = re.sub(r'\s+', ' ', normalized)
+        return normalized.strip()
+
+    def _find_fuzzy_matches(self, normalized_phrase: str, limit: int = 5):
+        """Находит похожие модели при опечатках"""
+        if not normalized_phrase:
+            return []
+
+        unique_values = self.df['property_normalized'].dropna().unique()
+        scored = []
+        for value in unique_values:
+            score = SequenceMatcher(a=normalized_phrase, b=value).ratio()
+            if score >= 0.62:
+                scored.append((value, score))
+
+        scored.sort(key=lambda item: item[1], reverse=True)
+        return [value for value, _ in scored[:limit]]
     
     def _log_user_query(self, user, text):
         """Логирует запрос пользователя"""
@@ -92,19 +120,31 @@ class InsuranceLeasingBot:
         """Поиск в базе данных"""
         if self.df.empty:
             return "❗️ База данных недоступна. Попробуйте позже."
+
+        normalized_phrase = self._normalize_text(search_phrase)
+        if not normalized_phrase:
+            return "Пожалуйста, введите корректный запрос."
         
-        # Поиск без учета регистра
-        used_df = self.df[self.df['property'].str.contains(search_phrase, case=False, na=False)]
+        # Точное вхождение после нормализации
+        used_df = self.df[
+            self.df['property_normalized'].str.contains(normalized_phrase, regex=False, na=False)
+        ]
+
+        # Если точного нет - пробуем нечеткий поиск по близким строкам
+        if len(used_df) == 0:
+            fuzzy_matches = self._find_fuzzy_matches(normalized_phrase)
+            if fuzzy_matches:
+                used_df = self.df[self.df['property_normalized'].isin(fuzzy_matches)]
         
         if len(used_df) == 0:
-            return f"""❗️*Ничего не найдено по запросу* **«{search_phrase}»**.
-
-🔍 Пожалуйста, проверьте правильность написания или попробуйте другой вариант названия.
-
-💡 *Примеры запросов:*
-- `Haval Jolion`
-- `sitrak`
-- `BMW X5`"""
+            return (
+                f"❗️ Ничего не найдено по запросу «{search_phrase}».\n\n"
+                "🔍 Проверьте написание или попробуйте другой вариант названия.\n\n"
+                "💡 Примеры запросов:\n"
+                "- Haval Jolion\n"
+                "- sitrak\n"
+                "- BMW X5"
+            )
         
         records_count = len(used_df)
         property_min = round((used_df['property_value'].min()) / 1000000, 3)
@@ -116,20 +156,18 @@ class InsuranceLeasingBot:
         insurance_type = used_df['type'].mode()[0] if not used_df['type'].empty else "Не указано"
         insurance_company = used_df['insurer'].mode()[0] if not used_df['insurer'].empty else "Не указано"
         
-        return f"""🔍 *Результаты по запросу:* _"{search_phrase}"_
-
-📄 Найдено *{records_count}* запис{"ь" if records_count == 1 else "и"} о таком предмете лизинга.
-
-💰 *Цена предмета лизинга:*
-• Медианная цена: *{property_median} млн ₽*
-• Диапазон: от *{property_min} млн ₽* до *{property_max} млн ₽*
-
-🛡 *Страховой тариф:*
-• Медианный тариф: *{tarif_median}%*
-• Диапазон: от *{tarif_min}%* до *{tarif_max}%*
-
-🏷 Чаще всего страхуется как: *"{insurance_type}"* 
-🏙 Чаще всего страхуется в страховой компании: *"{insurance_company}"*"""
+        return (
+            f"🔍 Результаты по запросу: \"{search_phrase}\"\n\n"
+            f"📄 Найдено {records_count} запис{'ь' if records_count == 1 else 'и'} о таком предмете лизинга.\n\n"
+            "💰 Цена предмета лизинга:\n"
+            f"• Медианная цена: {property_median} млн ₽\n"
+            f"• Диапазон: от {property_min} млн ₽ до {property_max} млн ₽\n\n"
+            "🛡 Страховой тариф:\n"
+            f"• Медианный тариф: {tarif_median}%\n"
+            f"• Диапазон: от {tarif_min}% до {tarif_max}%\n\n"
+            f"🏷 Чаще всего страхуется как: \"{insurance_type}\"\n"
+            f"🏙 Чаще всего страхуется в страховой компании: \"{insurance_company}\""
+        )
     
     def _get_welcome_phrase(self):
         """Возвращает приветственное сообщение"""
@@ -229,7 +267,7 @@ class InsuranceLeasingBot:
         
         try:
             result = await self._search_in_base(query)
-            await update.message.reply_text(result, parse_mode='Markdown')
+            await update.message.reply_text(result)
         except Exception as e:
             err_msg = f"Срочно! Бот не смог обработать запрос:\nОшибка при обработке запроса пользователя {user.id} ({user.username}): {e}\n{traceback.format_exc()}"
             await self._notify_admin(err_msg)

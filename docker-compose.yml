@@ -12,7 +12,13 @@ services:
       - ./user_queries.log:/app/user_queries.log
       - ./tariffs_online.csv:/app/tariffs_online.csv:ro
     healthcheck:
-      test: ["CMD", "python", "-c", "import os; exit(0 if os.path.exists('/app/bot.py') else 1)"]
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import os, pandas as pd; ok = bool(os.getenv('TELEGRAM_BOT_TOKEN')) and os.path.exists('/app/tariffs_online.csv') and os.path.getsize('/app/tariffs_online.csv') > 0 and (not pd.read_csv('/app/tariffs_online.csv', sep=';', nrows=1).empty); raise SystemExit(0 if ok else 1)",
+        ]
       interval: 30s
       timeout: 10s
       retries: 3

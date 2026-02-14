@@ -43,11 +43,10 @@ jobs:
           host: ${{ secrets.TIMEWEB_HOST }}
           username: ${{ secrets.TIMEWEB_USERNAME }}
           key: ${{ secrets.TIMEWEB_SSH_KEY }}
-          envs: TELEGRAM_BOT_TOKEN,ADMIN_TELEGRAM_BOT_TOKEN,ADMIN_TELEGRAM_USER_ID,BOT_NAME
+          envs: TELEGRAM_BOT_TOKEN,ADMIN_TELEGRAM_USER_ID,BOT_NAME
           script: |
             # Set environment variables
             export TELEGRAM_BOT_TOKEN="${{ secrets.TELEGRAM_BOT_TOKEN }}"
-            export ADMIN_TELEGRAM_BOT_TOKEN="${{ secrets.ADMIN_TELEGRAM_BOT_TOKEN }}"
             export ADMIN_TELEGRAM_USER_ID="${{ secrets.ADMIN_TELEGRAM_USER_ID }}"
             export BOT_NAME="${{ env.BOT_NAME }}"
             
@@ -72,7 +71,6 @@ jobs:
             # Create .env file from secrets
             cat > .env << EOF
             TELEGRAM_BOT_TOKEN=$TELEGRAM_BOT_TOKEN
-            ADMIN_TELEGRAM_BOT_TOKEN=$ADMIN_TELEGRAM_BOT_TOKEN
             ADMIN_TELEGRAM_USER_ID=$ADMIN_TELEGRAM_USER_ID
             EOF
             

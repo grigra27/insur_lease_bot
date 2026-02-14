@@ -13,7 +13,7 @@ RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir -r requirements.txt
 
 # Копируем код приложения
-COPY bot.py .
+COPY bot.py send_digest_once.py .
 
 # Создаем пользователя для безопасности
 RUN useradd --create-home --shell /bin/bash app && \
