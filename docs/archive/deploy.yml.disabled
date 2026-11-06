@@ -1,3 +1,4 @@
+# Historical deployment workflow. Archived on 2026-11-06; do not reactivate automatically.
 name: Deploy to Timeweb Cloud
 
 on:

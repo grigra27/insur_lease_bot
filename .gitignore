@@ -115,3 +115,6 @@ tariffs_service_file.ipynb
 tariffs_online.csv
 secrets-examples.txt
 user_queries.log
+
+# Private retirement backups contain production credentials and user data.
+insur_lease_bot-private-*
